@@ -53,6 +53,8 @@
 #include "mysql.h"
 #include "mysql_version.h"
 #include "mysqld_error.h"
+#include "hashmap.h"
+#include "hashmap.c"
 
 #include <welcome_copyright_notice.h> /* ORACLE_WELCOME_COPYRIGHT_NOTICE */
 
@@ -90,6 +92,7 @@
 /* Max length GTID position that we will output. */
 #define MAX_GTID_LENGTH 1024
 
+
 static void add_load_option(DYNAMIC_STRING *str, const char *option,
                              const char *option_value);
 static ulong find_set(TYPELIB *, const char *, size_t, char **, uint *);
@@ -120,7 +123,7 @@ static MYSQL mysql_connection,*mysql=0;
 static DYNAMIC_STRING insert_pat;
 static char  *opt_password=0,*current_user=0,
              *current_host=0,*path=0,*fields_terminated=0,
-             *lines_terminated=0, *enclosed=0, *opt_enclosed=0, *escaped=0,
+             *lines_terminated=0, *enclosed=0, *opt_enclosed=0, *opt_gdpr=0, *escaped=0,
              *where=0, *order_by=0,
              *opt_compatible_mode_str= 0,
              *err_ptr= 0,
@@ -196,6 +199,21 @@ const char *compatible_mode_names[]=
   "ANSI",
   NullS
 };
+const char GDPR_PATTERN_INCR[8]="incr%lu";
+const int8 GDPR_PATTERN_INCR_SPEC_CNT=3;
+const char GDPR_PATTERN_LASTNAME[7]="Doe%lu";
+const int8 GDPR_PATTERN_LASTNAME_SPEC_CNT=3;
+const char GDPR_PATTERN_FIRSTNAME[8]="John%lu";
+const int8 GDPR_PATTERN_FIRSTNAME_SPEC_CNT=3;
+const char GDPR_PATTERN_IP[10]="127.0.0.1";
+const int8 GDPR_PATTERN_IP_SPEC_CNT=0;
+const char GDPR_PATTERN_PHONE[11]="5555555555";
+const int8 GDPR_PATTERN_PHONE_SPEC_CNT=0;
+const char GDPR_PATTERN_EMAIL[19]="m2x%lu@example.com";
+const int8 GDPR_PATTERN_EMAIL_SPEC_CNT=3;
+const char GDPR_PATTERN_DOB[11]="1973-12-15";
+const int8 GDPR_PATTERN_DOB_SPEC_CNT=0;
+
 #define MASK_ANSI_QUOTES \
 (\
  (1<<2)  | /* POSTGRESQL */\
@@ -209,8 +227,25 @@ TYPELIB compatible_mode_typelib= {array_elements(compatible_mode_names) - 1,
                                   "", compatible_mode_names, NULL};
 
 #define MED_ENGINES "MRG_MyISAM, MRG_ISAM, CONNECT, OQGRAPH, SPIDER, VP, FEDERATED"
+#define GDPR_TABLE_WITH_FIELD_MAX_LENGTH (256)
+#define GDPR_TABLE_MAX_NAME (128)
+#define GDPR_FUNCTION_MAX_NAME (32)
 
 HASH ignore_table;
+map_t gdpr_table;
+map_t gdpr_table_list;
+
+
+typedef struct gdpr_sanitize_st
+{
+    char name[GDPR_TABLE_WITH_FIELD_MAX_LENGTH];			/* table_name.field_name  */
+    char function[GDPR_FUNCTION_MAX_NAME];			/* Function name */
+} gdpr_sanitize_t;
+
+typedef struct gdpr_list_st
+{
+    char name[GDPR_TABLE_MAX_NAME];			/* Table name  */
+} gdpr_list_t;
 
 static struct my_option my_long_options[] =
 {
@@ -334,6 +369,9 @@ static struct my_option my_long_options[] =
   {"fields-optionally-enclosed-by", OPT_O_ENC,
    "Fields in the output file are optionally enclosed by the given character.",
    &opt_enclosed, &opt_enclosed, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0 ,0, 0},
+   {"gdpr", OPT_GDPR,
+   "Fields in the output file are optionally enclosed by the given character.",
+   &opt_gdpr, &opt_gdpr, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0 ,0, 0},
   {"fields-escaped-by", OPT_ESC,
    "Fields in the output file are escaped by the given character.",
    &escaped, &escaped, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
@@ -906,6 +944,39 @@ get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
       exit(EX_EOM);
     break;
   }
+  case (int) OPT_GDPR:
+  {
+     if (!strchr(argument, '.'))
+     {
+       fprintf(stderr, "Illegal use of option --gdpr=<database>.<table>\n");
+       exit(1);
+     }
+
+     gdpr_sanitize_t* gdpr_value;
+     gdpr_list_t* gdpr_list;
+     int error;
+     char *field_declaration = strtok(my_strdup(argument, MYF(0)), ":");
+     char *field_and_function_ptr = field_declaration;
+     char *function_declaration = strtok(NULL, ":");
+     char *gdpr_table_name = strtok(my_strdup(field_declaration, MYF(0)), ".");
+     field_declaration = strtok(NULL, ".");
+
+     gdpr_value = malloc(sizeof(gdpr_sanitize_t));
+     bzero(gdpr_value->name, sizeof(gdpr_sanitize_t));
+     snprintf(gdpr_value->name, GDPR_TABLE_WITH_FIELD_MAX_LENGTH, "%s%s", gdpr_table_name, field_declaration);
+     snprintf(gdpr_value->function, GDPR_FUNCTION_MAX_NAME, "%s", function_declaration);
+     error = hashmap_put(gdpr_table, gdpr_value->name, gdpr_value);
+     gdpr_list = malloc(sizeof(gdpr_list_t));
+     bzero(gdpr_list->name, sizeof(gdpr_list_t));
+     snprintf(gdpr_list->name, GDPR_TABLE_MAX_NAME, "%s", gdpr_table_name);
+     hashmap_put(gdpr_table_list, gdpr_list->name, gdpr_list);
+
+     my_free(gdpr_table_name);
+     my_free(field_and_function_ptr);
+    if (error!=MAP_OK)
+      exit(EX_EOM);
+    break;
+  }
   case (int) OPT_COMPATIBLE:
     {
       char buff[255];
@@ -982,6 +1053,8 @@ static int get_options(int *argc, char ***argv)
   if (my_hash_init(&ignore_table, charset_info, 16, 0, 0,
                    (my_hash_get_key) get_table_key, my_free, 0))
     return(EX_EOM);
+  gdpr_table = hashmap_new();
+  gdpr_table_list = hashmap_new();
   /* Don't copy internal log tables */
   if (my_hash_insert(&ignore_table,
                      (uchar*) my_strdup("mysql.apply_status", MYF(MY_WME))) ||
@@ -3823,6 +3896,13 @@ static void dump_table(char *table, char *db)
       check_io(md_result_file);
     }
 
+    gdpr_sanitize_t* gdpr_columns[mysql_num_fields(res)];
+    bzero(gdpr_columns, sizeof(gdpr_columns));
+    char* gdpr_table_name;
+    my_bool isTableGDPR = hashmap_get(gdpr_table_list, table, (void**)(&gdpr_table_name)) == MAP_OK;
+    int buffer_field_length;
+    int buffer_field_length_with_cutted_zero;
+
     while ((row= mysql_fetch_row(res)))
     {
       uint i;
@@ -3851,11 +3931,21 @@ static void dump_table(char *table, char *db)
                       "Not enough fields from table %s! Aborting.\n",
                       result_table);
 
+         if (rownr == 1) {
+            if (gdpr_columns[i] == NULL && isTableGDPR) {
+               gdpr_columns[i] = malloc(sizeof(gdpr_sanitize_t));
+               bzero(gdpr_columns[i]->name, sizeof(gdpr_sanitize_t));
+               snprintf(gdpr_columns[i]->name, GDPR_TABLE_WITH_FIELD_MAX_LENGTH, "%s%s", table, field->name);
+               hashmap_get(gdpr_table, gdpr_columns[i]->name, (void**)(&gdpr_columns[i]));
+            }
+         }
+
         /*
            63 is my_charset_bin. If charsetnr is not 63,
            we have not a BLOB but a TEXT column.
            we'll dump in hex only BLOB columns.
         */
+
         is_blob= (opt_hex_blob && field->charsetnr == 63 &&
                   (field->type == MYSQL_TYPE_BIT ||
                    field->type == MYSQL_TYPE_STRING ||
@@ -3901,10 +3991,76 @@ static void dump_table(char *table, char *db)
                 else
                 {
                   dynstr_append_checked(&extended_row,"'");
-                  extended_row.length +=
-                  mysql_real_escape_string(&mysql_connection,
-                                           &extended_row.str[extended_row.length],
-                                           row[i],length);
+                  int row_n_digits = floor(log10(rownr)) + 1;
+                  if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "incr") == 0) {
+                     buffer_field_length = sizeof(GDPR_PATTERN_INCR) + row_n_digits - GDPR_PATTERN_INCR_SPEC_CNT;
+                     bzero(row[i], length);
+                     snprintf(row[i], buffer_field_length, GDPR_PATTERN_INCR, rownr);
+                     buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                     extended_row.length +=
+                             mysql_real_escape_string(&mysql_connection,
+                                                      &extended_row.str[extended_row.length],
+                                                      row[i], buffer_field_length_with_cutted_zero);
+                  } else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "name") == 0) {
+                     buffer_field_length = sizeof(GDPR_PATTERN_FIRSTNAME) + row_n_digits - GDPR_PATTERN_FIRSTNAME_SPEC_CNT;
+                     bzero(row[i], length);
+                     snprintf(row[i], buffer_field_length, GDPR_PATTERN_FIRSTNAME, rownr);
+                     buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                     extended_row.length +=
+                             mysql_real_escape_string(&mysql_connection,
+                                                      &extended_row.str[extended_row.length],
+                                                      row[i], buffer_field_length_with_cutted_zero);
+                  } else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "lastname") == 0) {
+                     buffer_field_length = sizeof(GDPR_PATTERN_LASTNAME) + row_n_digits - GDPR_PATTERN_LASTNAME_SPEC_CNT;
+                     bzero(row[i], length);
+                     snprintf(row[i], buffer_field_length, GDPR_PATTERN_LASTNAME, rownr);
+                     buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                     extended_row.length +=
+                             mysql_real_escape_string(&mysql_connection,
+                                                      &extended_row.str[extended_row.length],
+                                                      row[i], buffer_field_length_with_cutted_zero);
+                  } else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "dob") == 0) {
+                     buffer_field_length = sizeof(GDPR_PATTERN_DOB) - GDPR_PATTERN_DOB_SPEC_CNT;
+                     bzero(row[i], length);
+                     snprintf(row[i], buffer_field_length, GDPR_PATTERN_DOB);
+                     buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                     extended_row.length +=
+                             mysql_real_escape_string(&mysql_connection,
+                                                      &extended_row.str[extended_row.length],
+                                                      row[i], buffer_field_length_with_cutted_zero);
+                  }  else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "ip") == 0) {
+                      buffer_field_length = sizeof(GDPR_PATTERN_IP) - GDPR_PATTERN_IP_SPEC_CNT;
+                      bzero(row[i], length);
+                      snprintf(row[i], buffer_field_length, GDPR_PATTERN_IP);
+                      buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                      extended_row.length +=
+                              mysql_real_escape_string(&mysql_connection,
+                                                       &extended_row.str[extended_row.length],
+                                                       row[i], buffer_field_length_with_cutted_zero);
+                  }  else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "phone") == 0) {
+                  		buffer_field_length = sizeof(GDPR_PATTERN_PHONE) - GDPR_PATTERN_PHONE_SPEC_CNT;
+                      bzero(row[i], length);
+                      snprintf(row[i], buffer_field_length, GDPR_PATTERN_PHONE);
+                      buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                      extended_row.length +=
+                              mysql_real_escape_string(&mysql_connection,
+                                                       &extended_row.str[extended_row.length],
+                                                       row[i], buffer_field_length_with_cutted_zero);
+                  } else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "email") == 0) {
+                     buffer_field_length = sizeof(GDPR_PATTERN_EMAIL) + row_n_digits - GDPR_PATTERN_EMAIL_SPEC_CNT;
+                     bzero(row[i], length);
+                     snprintf(row[i], buffer_field_length, GDPR_PATTERN_EMAIL, rownr);
+                     buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                     extended_row.length +=
+                              mysql_real_escape_string(&mysql_connection,
+                                                       &extended_row.str[extended_row.length],
+                                                       row[i], buffer_field_length_with_cutted_zero);
+                  } else {
+                     extended_row.length +=
+                              mysql_real_escape_string(&mysql_connection,
+                                                       &extended_row.str[extended_row.length],
+                                                       row[i],length);
+                  }
                   extended_row.str[extended_row.length]='\0';
                   dynstr_append_checked(&extended_row,"'");
                 }
@@ -4045,6 +4201,11 @@ static void dump_table(char *table, char *db)
         fputs(");\n", md_result_file);
         check_io(md_result_file);
       }
+    }
+
+    unsigned long i;
+    for(i = 0; i < (sizeof(gdpr_columns)/ sizeof(struct gdpr_sanitize_st)); i++) {
+       my_free(gdpr_columns[i]);
     }
 
     /* XML - close table tag and supress regular output */
@@ -5983,7 +6144,6 @@ static void dynstr_realloc_checked(DYNAMIC_STRING *str, ulong additional_size)
     die(EX_MYSQLERR, DYNAMIC_STR_ERROR_MSG);
 }
 
-
 int main(int argc, char **argv)
 {
   char bin_log_name[FN_REFLEN];
@@ -6133,6 +6293,8 @@ int main(int argc, char **argv)
       dump_databases(argv);
     }
   }
+  hashmap_free(gdpr_table);
+  hashmap_free(gdpr_table_list);
 
   /* add 'START SLAVE' to end of dump */
   if (opt_slave_apply && add_slave_statements())
