@@ -247,6 +247,10 @@ typedef struct gdpr_list_st
     char name[GDPR_TABLE_MAX_NAME];			/* Table name  */
 } gdpr_list_t;
 
+
+gdpr_sanitize_t* gdpr_value;
+gdpr_list_t* gdpr_list;
+
 static struct my_option my_long_options[] =
 {
   {"all-databases", 'A',
@@ -951,9 +955,6 @@ get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
        fprintf(stderr, "Illegal use of option --gdpr=<database>.<table>\n");
        exit(1);
      }
-
-     gdpr_sanitize_t* gdpr_value;
-     gdpr_list_t* gdpr_list;
      int error;
      char *field_declaration = strtok(my_strdup(argument, MYF(0)), ":");
      char *field_and_function_ptr = field_declaration;
@@ -961,12 +962,10 @@ get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
      char *gdpr_table_name = strtok(my_strdup(field_declaration, MYF(0)), ".");
      field_declaration = strtok(NULL, ".");
 
-     gdpr_value = malloc(sizeof(gdpr_sanitize_t));
      bzero(gdpr_value->name, sizeof(gdpr_sanitize_t));
      snprintf(gdpr_value->name, GDPR_TABLE_WITH_FIELD_MAX_LENGTH, "%s%s", gdpr_table_name, field_declaration);
      snprintf(gdpr_value->function, GDPR_FUNCTION_MAX_NAME, "%s", function_declaration);
      error = hashmap_put(gdpr_table, gdpr_value->name, gdpr_value);
-     gdpr_list = malloc(sizeof(gdpr_list_t));
      bzero(gdpr_list->name, sizeof(gdpr_list_t));
      snprintf(gdpr_list->name, GDPR_TABLE_MAX_NAME, "%s", gdpr_table_name);
      hashmap_put(gdpr_table_list, gdpr_list->name, gdpr_list);
@@ -6155,6 +6154,8 @@ int main(int argc, char **argv)
   compatible_mode_normal_str[0]= 0;
   default_charset= (char *)mysql_universal_client_charset;
   bzero((char*) &ignore_table, sizeof(ignore_table));
+  gdpr_value = malloc(sizeof(gdpr_sanitize_t));
+  gdpr_list = malloc(sizeof(gdpr_list_t));
 
   exit_code= get_options(&argc, &argv);
   if (exit_code)
