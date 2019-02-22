@@ -3933,10 +3933,9 @@ static void dump_table(char *table, char *db)
 
          if (rownr == 1) {
             if (gdpr_columns[i] == NULL && isTableGDPR) {
-               gdpr_columns[i] = malloc(sizeof(gdpr_sanitize_t));
-               bzero(gdpr_columns[i]->name, sizeof(gdpr_sanitize_t));
-               snprintf(gdpr_columns[i]->name, GDPR_TABLE_WITH_FIELD_MAX_LENGTH, "%s%s", table, field->name);
-               hashmap_get(gdpr_table, gdpr_columns[i]->name, (void**)(&gdpr_columns[i]));
+               char tmp_table_name[GDPR_TABLE_WITH_FIELD_MAX_LENGTH];
+               snprintf(tmp_table_name, GDPR_TABLE_WITH_FIELD_MAX_LENGTH, "%s%s", table, field->name);
+               hashmap_get(gdpr_table, tmp_table_name, (void**)(&gdpr_columns[i]));
             }
          }
 
