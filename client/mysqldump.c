@@ -3992,42 +3992,46 @@ static void dump_table(char *table, char *db)
                   dynstr_append_checked(&extended_row,"'");
                   int row_n_digits = floor(log10(rownr)) + 1;
                   buffer_field_length_with_cutted_zero = length;
-                  if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "incr") == 0) {
-                     buffer_field_length = sizeof(GDPR_PATTERN_INCR) + row_n_digits - GDPR_PATTERN_INCR_SPEC_CNT;
-                     bzero(row[i], length);
-                     snprintf(row[i], buffer_field_length, GDPR_PATTERN_INCR, rownr);
-                     buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                  } else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "name") == 0) {
-                     buffer_field_length = sizeof(GDPR_PATTERN_FIRSTNAME) + row_n_digits - GDPR_PATTERN_FIRSTNAME_SPEC_CNT;
-                     bzero(row[i], length);
-                     snprintf(row[i], buffer_field_length, GDPR_PATTERN_FIRSTNAME, rownr);
-                     buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                  } else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "lastname") == 0) {
-                     buffer_field_length = sizeof(GDPR_PATTERN_LASTNAME) + row_n_digits - GDPR_PATTERN_LASTNAME_SPEC_CNT;
-                     bzero(row[i], length);
-                     snprintf(row[i], buffer_field_length, GDPR_PATTERN_LASTNAME, rownr);
-                     buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                  } else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "dob") == 0) {
-                     buffer_field_length = sizeof(GDPR_PATTERN_DOB) - GDPR_PATTERN_DOB_SPEC_CNT;
-                     bzero(row[i], length);
-                     snprintf(row[i], buffer_field_length, GDPR_PATTERN_DOB);
-                     buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                  }  else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "ip") == 0) {
-                      buffer_field_length = sizeof(GDPR_PATTERN_IP) - GDPR_PATTERN_IP_SPEC_CNT;
-                      bzero(row[i], length);
-                      snprintf(row[i], buffer_field_length, GDPR_PATTERN_IP);
-                      buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                  }  else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "phone") == 0) {
-                  		buffer_field_length = sizeof(GDPR_PATTERN_PHONE) - GDPR_PATTERN_PHONE_SPEC_CNT;
-                      bzero(row[i], length);
-                      snprintf(row[i], buffer_field_length, GDPR_PATTERN_PHONE);
-                      buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                  } else if (gdpr_columns[i] != NULL && strcmp(gdpr_columns[i]->function, "email") == 0) {
-                     buffer_field_length = sizeof(GDPR_PATTERN_EMAIL) + row_n_digits - GDPR_PATTERN_EMAIL_SPEC_CNT;
-                     bzero(row[i], length);
-                     snprintf(row[i], buffer_field_length, GDPR_PATTERN_EMAIL, rownr);
-                     buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                  }
+                   if (gdpr_columns[i] != NULL) {
+                      if (strcmp(gdpr_columns[i]->function, "incr") == 0) {
+                         buffer_field_length = sizeof(GDPR_PATTERN_INCR) + row_n_digits - GDPR_PATTERN_INCR_SPEC_CNT;
+                         bzero(row[i], length);
+                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_INCR, rownr);
+                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                      } else if (strcmp(gdpr_columns[i]->function, "name") == 0) {
+                         buffer_field_length =
+                               sizeof(GDPR_PATTERN_FIRSTNAME) + row_n_digits - GDPR_PATTERN_FIRSTNAME_SPEC_CNT;
+                         bzero(row[i], length);
+                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_FIRSTNAME, rownr);
+                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                      } else if (strcmp(gdpr_columns[i]->function, "lastname") == 0) {
+                         buffer_field_length =
+                               sizeof(GDPR_PATTERN_LASTNAME) + row_n_digits - GDPR_PATTERN_LASTNAME_SPEC_CNT;
+                         bzero(row[i], length);
+                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_LASTNAME, rownr);
+                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                      } else if (strcmp(gdpr_columns[i]->function, "dob") == 0) {
+                         buffer_field_length = sizeof(GDPR_PATTERN_DOB) - GDPR_PATTERN_DOB_SPEC_CNT;
+                         bzero(row[i], length);
+                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_DOB);
+                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                      } else if (strcmp(gdpr_columns[i]->function, "ip") == 0) {
+                         buffer_field_length = sizeof(GDPR_PATTERN_IP) - GDPR_PATTERN_IP_SPEC_CNT;
+                         bzero(row[i], length);
+                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_IP);
+                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                      } else if (strcmp(gdpr_columns[i]->function, "phone") == 0) {
+                         buffer_field_length = sizeof(GDPR_PATTERN_PHONE) - GDPR_PATTERN_PHONE_SPEC_CNT;
+                         bzero(row[i], length);
+                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_PHONE);
+                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                      } else if (strcmp(gdpr_columns[i]->function, "email") == 0) {
+                         buffer_field_length = sizeof(GDPR_PATTERN_EMAIL) + row_n_digits - GDPR_PATTERN_EMAIL_SPEC_CNT;
+                         bzero(row[i], length);
+                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_EMAIL, rownr);
+                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
+                      }
+                   }
                    extended_row.length +=
                            mysql_real_escape_string(&mysql_connection,
                                                     &extended_row.str[extended_row.length],
