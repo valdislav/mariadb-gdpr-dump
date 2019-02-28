@@ -497,7 +497,7 @@ static struct my_option my_long_options[] =
   {"port", 'P', "Port number to use for connection.", &opt_mysql_port,
    &opt_mysql_port, 0, GET_UINT, REQUIRED_ARG, 0, 0, 0, 0, 0,
    0},
-  {"protocol", OPT_MYSQL_PROTOCOL, 
+  {"protocol", OPT_MYSQL_PROTOCOL,
    "The protocol to use for connection (tcp, socket, pipe, memory).",
    0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"quick", 'q', "Don't buffer query, dump directly to stdout.",
@@ -549,7 +549,7 @@ static struct my_option my_long_options[] =
    "Disable --opt. Disables --add-drop-table, --add-locks, --create-options, --quick, --extended-insert, --lock-tables, --set-charset, and --disable-keys.",
    0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"socket", 'S', "The socket file to use for connection.",
-   &opt_mysql_unix_port, &opt_mysql_unix_port, 0, 
+   &opt_mysql_unix_port, &opt_mysql_unix_port, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 #include <sslopt-longopts.h>
   {"tab",'T',
@@ -615,6 +615,8 @@ static int dump_tablespaces_for_tables(char *db, char **table_names, int tables)
 static int dump_tablespaces_for_databases(char** databases);
 static int dump_tablespaces(char* ts_where);
 static void print_comment(FILE *, my_bool, const char *, ...);
+
+const char * update_field_pointer(char *field, ulong *buffer_field_length, const char *pattern, ulong replace);
 
 /*
   Print the supplied message if in verbose mode
@@ -722,7 +724,7 @@ static void write_header(FILE *sql_file, char *db_name)
   {
     fputs("<?xml version=\"1.0\"?>\n", sql_file);
     /*
-      Schema reference.  Allows use of xsi:nil for NULL values and 
+      Schema reference.  Allows use of xsi:nil for NULL values and
       xsi:type to define an element's data type.
     */
     fputs("<mysqldump ", sql_file);
@@ -1158,7 +1160,7 @@ static void DB_error(MYSQL *mysql_arg, const char *when)
     error_num   - process return value
     fmt_reason  - a format string for use by my_vsnprintf.
     ...         - variable arguments for above fmt_reason string
-  
+
   DESCRIPTION
     This call prints out the formatted error message to stderr and then
     terminates the process.
@@ -1187,15 +1189,15 @@ static void die(int error_num, const char* fmt_reason, ...)
     error_num   - process return value
     fmt_reason  - a format string for use by my_vsnprintf.
     ...         - variable arguments for above fmt_reason string
-  
+
   DESCRIPTION
     This call prints out the formatted error message to stderr and then
     terminates the process, unless the --force command line option is used.
-    
+
     This call should be used for non-fatal errors (such as database
     errors) that the code may still be able to continue to the next unit
     of work.
-    
+
 */
 static void maybe_die(int error_num, const char* fmt_reason, ...)
 {
@@ -1790,7 +1792,7 @@ static int connect_to_db(char *host, char *user,char *passwd)
 
     /* Don't switch charsets for 4.1 and earlier.  (bug#34192). */
     server_supports_switching_charsets= FALSE;
-  } 
+  }
   /*
     As we're going to set SQL_MODE, it would be lost on reconnect, so we
     cannot reconnect.
@@ -2007,7 +2009,7 @@ static void print_quoted_xml(FILE *xml_file, const char *str, size_t len,
   Print xml tag. Optionally add attribute(s).
 
   SYNOPSIS
-    print_xml_tag(xml_file, sbeg, send, tag_name, first_attribute_name, 
+    print_xml_tag(xml_file, sbeg, send, tag_name, first_attribute_name,
                     ..., attribute_name_n, attribute_value_n, NullS)
     xml_file              - output file
     sbeg                  - line beginning
@@ -2022,7 +2024,7 @@ static void print_quoted_xml(FILE *xml_file, const char *str, size_t len,
     Print XML tag with any number of attribute="value" pairs to the xml_file.
 
     Format is:
-      sbeg<tag_name first_attribute_name="first_attribute_value" ... 
+      sbeg<tag_name first_attribute_name="first_attribute_value" ...
       attribute_name_n="attribute_value_n">send
   NOTE
     Additional arguments must be present in attribute/value pairs.
@@ -2032,8 +2034,8 @@ static void print_quoted_xml(FILE *xml_file, const char *str, size_t len,
 */
 
 static void print_xml_tag(FILE * xml_file, const char* sbeg,
-                          const char* line_end, 
-                          const char* tag_name, 
+                          const char* line_end,
+                          const char* tag_name,
                           const char* first_attribute_name, ...)
 {
   va_list arg_list;
@@ -2041,7 +2043,7 @@ static void print_xml_tag(FILE * xml_file, const char* sbeg,
 
   fputs(sbeg, xml_file);
   fputc('<', xml_file);
-  fputs(tag_name, xml_file);  
+  fputs(tag_name, xml_file);
 
   va_start(arg_list, first_attribute_name);
   attribute_name= first_attribute_name;
@@ -2051,9 +2053,9 @@ static void print_xml_tag(FILE * xml_file, const char* sbeg,
     DBUG_ASSERT(attribute_value != NullS);
 
     fputc(' ', xml_file);
-    fputs(attribute_name, xml_file);    
+    fputs(attribute_name, xml_file);
     fputc('\"', xml_file);
-    
+
     print_quoted_xml(xml_file, attribute_value, strlen(attribute_value), 0);
     fputc('\"', xml_file);
 
@@ -2283,10 +2285,10 @@ static void print_comment(FILE *sql_file, my_bool is_error, const char *format,
 
 /*
  create_delimiter
- Generate a new (null-terminated) string that does not exist in  query 
+ Generate a new (null-terminated) string that does not exist in  query
  and is therefore suitable for use as a query delimiter.  Store this
  delimiter in  delimiter_buff .
- 
+
  This is quite simple in that it doesn't even try to parse statements as an
  interpreter would.  It merely returns a string that is not in the query, which
  is much more than adequate for constructing a delimiter.
@@ -2295,15 +2297,15 @@ static void print_comment(FILE *sql_file, my_bool is_error, const char *format,
    ptr to the delimiter  on Success
    NULL                  on Failure
 */
-static char *create_delimiter(char *query, char *delimiter_buff, 
-                              int delimiter_max_size) 
+static char *create_delimiter(char *query, char *delimiter_buff,
+                              int delimiter_max_size)
 {
   int proposed_length;
   char *presence;
 
   delimiter_buff[0]= ';';  /* start with one semicolon, and */
 
-  for (proposed_length= 2; proposed_length < delimiter_max_size; 
+  for (proposed_length= 2; proposed_length < delimiter_max_size;
       delimiter_max_size++) {
 
     delimiter_buff[proposed_length-1]= ';';  /* add semicolons, until */
@@ -2383,7 +2385,7 @@ static uint dump_events_for_db(char *db)
     {
       event_name= quote_name(event_list_row[1], name_buff, 0);
       DBUG_PRINT("info", ("retrieving CREATE EVENT for %s", name_buff));
-      my_snprintf(query_buff, sizeof(query_buff), "SHOW CREATE EVENT %s", 
+      my_snprintf(query_buff, sizeof(query_buff), "SHOW CREATE EVENT %s",
           event_name);
 
       if (mysql_query_with_error_report(mysql, &event_res, query_buff))
@@ -2407,7 +2409,7 @@ static uint dump_events_for_db(char *db)
           char *query_str;
 
           if (opt_drop)
-            fprintf(sql_file, "/*!50106 DROP EVENT IF EXISTS %s */%s\n", 
+            fprintf(sql_file, "/*!50106 DROP EVENT IF EXISTS %s */%s\n",
                 event_name, delimiter);
 
           if (create_delimiter(row[3], delimiter, sizeof(delimiter)) == NULL)
@@ -2942,7 +2944,7 @@ static uint get_table_structure(char *table, char *db, char *table_type,
                     "-- Warning: Creating a stand-in table for view %s may"
                     " fail when replaying the dump file produced because "
                     "of the number of columns exceeding 1000. Exercise "
-                    "caution when replaying the produced dump file.\n", 
+                    "caution when replaying the produced dump file.\n",
                     table);
           if (opt_drop)
           {
@@ -3114,7 +3116,7 @@ static uint get_table_structure(char *table, char *db, char *table_type,
       if (!opt_xml)
         fprintf(sql_file, "CREATE TABLE %s (\n", result_table);
       else
-        print_xml_tag(sql_file, "\t", "\n", "table_structure", "name=", table, 
+        print_xml_tag(sql_file, "\t", "\n", "table_structure", "name=", table,
                 NullS);
       check_io(sql_file);
     }
@@ -3555,7 +3557,7 @@ static int dump_triggers_for_table(char *table_name, char *db_name)
       if (error)
         goto done;
     }
-    
+
   }
 
   if (opt_xml)
@@ -3595,7 +3597,7 @@ static void add_load_option(DYNAMIC_STRING *str, const char *option,
   }
 
   dynstr_append_checked(str, option);
-  
+
   if (strncmp(option_value, "0x", sizeof("0x")-1) == 0)
   {
     /* It's a hex constant, don't escape */
@@ -3618,7 +3620,7 @@ static void add_load_option(DYNAMIC_STRING *str, const char *option,
 
 static void field_escape(DYNAMIC_STRING* in, const char *from)
 {
-  uint end_backslashes= 0; 
+  uint end_backslashes= 0;
 
   dynstr_append_checked(in, "'");
 
@@ -3642,7 +3644,7 @@ static void field_escape(DYNAMIC_STRING* in, const char *from)
   /* Add missing backslashes if user has specified odd number of backs.*/
   if (end_backslashes)
     dynstr_append_checked(in, "\\");
-  
+
   dynstr_append_checked(in, "'");
 }
 
@@ -3758,7 +3760,7 @@ static void dump_table(char *table, char *db)
       Convert the path to native os format
       and resolve to the full filepath.
     */
-    convert_dirname(tmp_path,path,NullS);    
+    convert_dirname(tmp_path,path,NullS);
     my_load_path(tmp_path, tmp_path, NULL);
     fn_format(filename, table, tmp_path, ".txt", MYF(MY_UNPACK_FILENAME));
 
@@ -3782,7 +3784,7 @@ static void dump_table(char *table, char *db)
 
     if (fields_terminated || enclosed || opt_enclosed || escaped)
       dynstr_append_checked(&query_string, " FIELDS");
-    
+
     add_load_option(&query_string, " TERMINATED BY ", fields_terminated);
     add_load_option(&query_string, " ENCLOSED BY ", enclosed);
     add_load_option(&query_string, " OPTIONALLY ENCLOSED BY ", opt_enclosed);
@@ -3818,7 +3820,7 @@ static void dump_table(char *table, char *db)
     print_comment(md_result_file, 0,
                   "\n--\n-- Dumping data for table %s\n--\n",
                   fix_for_comment(result_table));
-    
+
     dynstr_append_checked(&query_string, "SELECT /*!40001 SQL_NO_CACHE */ * FROM ");
     dynstr_append_checked(&query_string, result_table);
 
@@ -3900,8 +3902,8 @@ static void dump_table(char *table, char *db)
     bzero(gdpr_columns, sizeof(gdpr_columns));
     char* gdpr_table_name;
     my_bool isTableGDPR = hashmap_get(gdpr_table_list, table, (void**)(&gdpr_table_name)) == MAP_OK;
-    int buffer_field_length;
-    int buffer_field_length_with_cutted_zero;
+    ulong buffer_field_length;
+		char tmp_field_buffer[256];
 
     while ((row= mysql_fetch_row(res)))
     {
@@ -3991,51 +3993,38 @@ static void dump_table(char *table, char *db)
                 {
                   dynstr_append_checked(&extended_row,"'");
                   int row_n_digits = floor(log10(rownr)) + 1;
-                  buffer_field_length_with_cutted_zero = length;
-                   if (gdpr_columns[i] != NULL) {
-                      if (strcmp(gdpr_columns[i]->function, "incr") == 0) {
-                         buffer_field_length = sizeof(GDPR_PATTERN_INCR) + row_n_digits - GDPR_PATTERN_INCR_SPEC_CNT;
-                         bzero(row[i], length);
-                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_INCR, rownr);
-                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                      } else if (strcmp(gdpr_columns[i]->function, "name") == 0) {
-                         buffer_field_length =
-                               sizeof(GDPR_PATTERN_FIRSTNAME) + row_n_digits - GDPR_PATTERN_FIRSTNAME_SPEC_CNT;
-                         bzero(row[i], length);
-                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_FIRSTNAME, rownr);
-                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                      } else if (strcmp(gdpr_columns[i]->function, "lastname") == 0) {
-                         buffer_field_length =
-                               sizeof(GDPR_PATTERN_LASTNAME) + row_n_digits - GDPR_PATTERN_LASTNAME_SPEC_CNT;
-                         bzero(row[i], length);
-                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_LASTNAME, rownr);
-                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                      } else if (strcmp(gdpr_columns[i]->function, "dob") == 0) {
-                         buffer_field_length = sizeof(GDPR_PATTERN_DOB) - GDPR_PATTERN_DOB_SPEC_CNT;
-                         bzero(row[i], length);
-                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_DOB);
-                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                      } else if (strcmp(gdpr_columns[i]->function, "ip") == 0) {
-                         buffer_field_length = sizeof(GDPR_PATTERN_IP) - GDPR_PATTERN_IP_SPEC_CNT;
-                         bzero(row[i], length);
-                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_IP);
-                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                      } else if (strcmp(gdpr_columns[i]->function, "phone") == 0) {
-                         buffer_field_length = sizeof(GDPR_PATTERN_PHONE) - GDPR_PATTERN_PHONE_SPEC_CNT;
-                         bzero(row[i], length);
-                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_PHONE);
-                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                      } else if (strcmp(gdpr_columns[i]->function, "email") == 0) {
-                         buffer_field_length = sizeof(GDPR_PATTERN_EMAIL) + row_n_digits - GDPR_PATTERN_EMAIL_SPEC_CNT;
-                         bzero(row[i], length);
-                         snprintf(row[i], buffer_field_length, GDPR_PATTERN_EMAIL, rownr);
-                         buffer_field_length_with_cutted_zero = buffer_field_length - 1;
-                      }
-                   }
-                   extended_row.length +=
-                           mysql_real_escape_string(&mysql_connection,
-                                                    &extended_row.str[extended_row.length],
-                                                    row[i],buffer_field_length_with_cutted_zero);
+                  buffer_field_length = length;
+                  const char *ptr = row[i];
+									if (gdpr_columns[i] != NULL) {
+										if (strcmp(gdpr_columns[i]->function, "incr") == 0) {
+											buffer_field_length = sizeof(GDPR_PATTERN_INCR) + row_n_digits - GDPR_PATTERN_INCR_SPEC_CNT;
+											ptr = update_field_pointer(tmp_field_buffer, &buffer_field_length, GDPR_PATTERN_INCR, rownr);
+										} else if (strcmp(gdpr_columns[i]->function, "name") == 0) {
+											buffer_field_length =
+													sizeof(GDPR_PATTERN_FIRSTNAME) + row_n_digits - GDPR_PATTERN_FIRSTNAME_SPEC_CNT;
+											ptr = update_field_pointer(tmp_field_buffer, &buffer_field_length, GDPR_PATTERN_FIRSTNAME, rownr);
+										} else if (strcmp(gdpr_columns[i]->function, "lastname") == 0) {
+											buffer_field_length =
+													sizeof(GDPR_PATTERN_LASTNAME) + row_n_digits - GDPR_PATTERN_LASTNAME_SPEC_CNT;
+											ptr = update_field_pointer(tmp_field_buffer, &buffer_field_length, GDPR_PATTERN_LASTNAME, rownr);
+										} else if (strcmp(gdpr_columns[i]->function, "dob") == 0) {
+											buffer_field_length = sizeof(GDPR_PATTERN_DOB) - GDPR_PATTERN_DOB_SPEC_CNT;
+											ptr = update_field_pointer(tmp_field_buffer, &buffer_field_length, GDPR_PATTERN_DOB, 0);
+										} else if (strcmp(gdpr_columns[i]->function, "ip") == 0) {
+											buffer_field_length = sizeof(GDPR_PATTERN_IP) - GDPR_PATTERN_IP_SPEC_CNT;
+											ptr = update_field_pointer(tmp_field_buffer, &buffer_field_length, GDPR_PATTERN_IP, 0);
+										} else if (strcmp(gdpr_columns[i]->function, "phone") == 0) {
+											buffer_field_length = sizeof(GDPR_PATTERN_PHONE) - GDPR_PATTERN_PHONE_SPEC_CNT;
+											ptr = update_field_pointer(tmp_field_buffer, &buffer_field_length, GDPR_PATTERN_PHONE, 0);
+										} else if (strcmp(gdpr_columns[i]->function, "email") == 0) {
+											buffer_field_length = sizeof(GDPR_PATTERN_EMAIL) + row_n_digits - GDPR_PATTERN_EMAIL_SPEC_CNT;
+											ptr = update_field_pointer(tmp_field_buffer, &buffer_field_length, GDPR_PATTERN_EMAIL, rownr);
+										}
+									}
+									extended_row.length +=
+											mysql_real_escape_string(&mysql_connection,
+																							 &extended_row.str[extended_row.length],
+																							 ptr, buffer_field_length);
                   extended_row.str[extended_row.length]='\0';
                   dynstr_append_checked(&extended_row,"'");
                 }
@@ -4089,7 +4078,7 @@ static void dump_table(char *table, char *db)
                 }
                 else
                 {
-                  print_xml_tag(md_result_file, "\t\t", "", "field", "name=", 
+                  print_xml_tag(md_result_file, "\t\t", "", "field", "name=",
                                 field->name, NullS);
                   print_quoted_xml(md_result_file, row[i], length, 0);
                 }
@@ -4232,6 +4221,19 @@ err:
   DBUG_VOID_RETURN;
 } /* dump_table */
 
+const char * update_field_pointer(char *field, ulong *buffer_field_length, const char *pattern, ulong replace) {
+	bzero(field, *buffer_field_length);
+
+	if (replace != 0) {
+		snprintf(field, *buffer_field_length, pattern, replace);
+	} else {
+		snprintf(field, *buffer_field_length, pattern);
+	}
+
+	*buffer_field_length = *buffer_field_length - 1;
+
+	return field;
+}
 
 static char *getTableName(int reset)
 {
@@ -4342,13 +4344,13 @@ static int dump_tablespaces(char* ts_where)
   char *ubs;
   char *endsemi;
   DBUG_ENTER("dump_tablespaces");
-  
+
   /*
     Try to turn off semi-join optimization (if that fails, this is a
     pre-optimizer_switch server, and the old query plan is ok for us.
   */
   mysql_query(mysql, "set optimizer_switch='semijoin=off'");
- 
+
   init_dynamic_string_checked(&sqlbuf,
                       "SELECT LOGFILE_GROUP_NAME,"
                       " FILE_NAME,"
@@ -5425,7 +5427,7 @@ static int do_show_slave_status(MYSQL *mysql_con, int use_gtid,
                 nogtid_comment_prefix, row[0]);
       else
         fprintf(md_result_file, "%sCHANGE MASTER TO ", nogtid_comment_prefix);
-      
+
       if (opt_include_master_host_port)
       {
         if (row[1 + multi_source])
