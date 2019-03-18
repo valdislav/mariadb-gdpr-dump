@@ -211,6 +211,8 @@ const char GDPR_PATTERN_PHONE[11]="5555555555";
 const int8 GDPR_PATTERN_PHONE_SPEC_CNT=0;
 const char GDPR_PATTERN_EMAIL[19]="m2x%lu@example.com";
 const int8 GDPR_PATTERN_EMAIL_SPEC_CNT=3;
+const char GDPR_PATTERN_NULL_STRING[5]="null";
+const int8 GDPR_PATTERN_NULL_STRING_SPEC_CNT=0;
 const char GDPR_PATTERN_DOB[11]="1973-12-15";
 const int8 GDPR_PATTERN_DOB_SPEC_CNT=0;
 
@@ -4019,6 +4021,9 @@ static void dump_table(char *table, char *db)
                     } else if (strcmp(gdpr_columns[i]->function, "email") == 0) {
                       buffer_field_length = sizeof(GDPR_PATTERN_EMAIL) + row_n_digits - GDPR_PATTERN_EMAIL_SPEC_CNT;
                       ptr = update_field_pointer(tmp_field_buffer, &buffer_field_length, GDPR_PATTERN_EMAIL, rownr);
+                    } else if (strcmp(gdpr_columns[i]->function, "nullString") == 0) {
+                      buffer_field_length = sizeof(GDPR_PATTERN_NULL_STRING) - GDPR_PATTERN_NULL_STRING_SPEC_CNT;
+                      ptr = update_field_pointer(tmp_field_buffer, &buffer_field_length, GDPR_PATTERN_NULL_STRING, 0);
                     }
                   }
                   extended_row.length +=
